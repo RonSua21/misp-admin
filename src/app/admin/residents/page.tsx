@@ -60,7 +60,6 @@ export default async function ResidentsPage({
 
   const { data: residents, count } = await query;
 
-  // Fetch application counts for the current page's users only.
   const userIds = (residents ?? []).map((r) => r.id);
   const { data: appCounts } = userIds.length
     ? await db.from("applications").select("userId").in("userId", userIds)
