@@ -1,6 +1,7 @@
 "use client";
-import { Sun, Moon, Bell } from "lucide-react";
+import { Sun, Moon } from "lucide-react";
 import { useTheme } from "@/components/providers/ThemeProvider";
+import NotificationBell from "@/components/layout/NotificationBell";
 
 export default function TopBar({
   title,
@@ -32,10 +33,7 @@ export default function TopBar({
             <Moon className="w-4 h-4" />
           )}
         </button>
-        <button className="p-2 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors relative">
-          <Bell className="w-4 h-4" />
-          <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-red-500" />
-        </button>
+        <NotificationBell />
       </div>
     </header>
   );

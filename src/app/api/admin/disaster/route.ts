@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { notifyAdmins } from "@/lib/notifications";
 
 // GET /api/admin/disaster — list all incidents
 export async function GET() {
@@ -69,6 +70,15 @@ export async function POST(request: Request) {
       .single();
 
     if (error) throw error;
+
+    // Notify other admins about the new incident (non-blocking, exclude the reporter)
+    notifyAdmins({
+      title: `New Incident: ${title}`,
+      message: `A new ${type.toLowerCase()} incident has been reported${barangay ? ` in Brgy. ${barangay}` : ""}.`,
+      type: "DISASTER_ALERT",
+      excludeUserId: dbUser.id,
+    }).catch((e) => console.error("[notifyAdmins disaster]", e));
+
     return NextResponse.json(data, { status: 201 });
   } catch (err) {
     console.error("[POST /api/admin/disaster]", err);

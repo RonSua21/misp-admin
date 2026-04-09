@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import {
   ArrowLeft, Flame, MapPin, Calendar, Users,
@@ -38,7 +38,7 @@ export default async function DisasterDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const db = createAdminClient();
+  const db = await createClient();
 
   const [{ data: incident }, { data: centers }, { data: inventory }] = await Promise.all([
     db.from("disaster_incidents").select("*").eq("id", id).single(),
