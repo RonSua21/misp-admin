@@ -100,7 +100,7 @@ export default function StatusUpdateForm({
         {(status === "APPROVED" || status === "DISBURSED") && (
           <div>
             <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-1.5">
-              Amount Approved (PHP)
+              Standard Benefit Assigned (PHP)
             </label>
             <input
               type="number"

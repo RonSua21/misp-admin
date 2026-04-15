@@ -38,8 +38,8 @@ export async function GET(
   }
 }
 
-// POST /api/admin/disaster/[id]/evacuees — register an evacuee
-// Body: { evacuationCenterId, name, age?, barangay?, headCount? }
+// POST /api/admin/disaster/[id]/evacuees — register an evacuee with DAFAC fields
+// Body: { evacuationCenterId, name, age?, barangay?, headCount?, tenurialStatus?, isSenior?, isPwd?, isPregnant? }
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -52,11 +52,40 @@ export async function POST(
 
     const db = createAdminClient();
     const body = await request.json();
-    const { evacuationCenterId, name, age, barangay, headCount = 1 } = body;
+    const {
+      evacuationCenterId,
+      name,
+      age,
+      barangay,
+      headCount    = 1,
+      tenurialStatus,
+      isSenior     = false,
+      isPwd        = false,
+      isPregnant   = false,
+    } = body;
 
     if (!evacuationCenterId || !name) {
       return NextResponse.json({ error: "evacuationCenterId and name are required." }, { status: 400 });
     }
+
+    // ── Look up standard assistance amount from DAFAC config ──────────
+    let assistanceAmount: number | null = null;
+    if (tenurialStatus) {
+      const validStatuses = ["OWNER", "RENTER", "SHARER", "BEDSPACER"];
+      if (!validStatuses.includes(tenurialStatus)) {
+        return NextResponse.json({ error: "Invalid tenurialStatus." }, { status: 400 });
+      }
+      const { data: config } = await db
+        .from("dafac_config")
+        .select("amount")
+        .eq("tenurial_status", tenurialStatus)
+        .single();
+      assistanceAmount = config?.amount ?? null;
+    }
+
+    // ── Generate DAFAC number via DB function ─────────────────────────
+    const yr = new Date().getFullYear();
+    const { data: dafacNumber } = await db.rpc("next_dafac_number", { yr });
 
     const now = new Date().toISOString();
     const { data, error } = await db
@@ -65,9 +94,16 @@ export async function POST(
         id:                  crypto.randomUUID(),
         evacuationCenterId,
         name,
-        age:                 age       ?? null,
-        barangay:            barangay  ?? null,
+        age:                 age         ?? null,
+        barangay:            barangay    ?? null,
         headCount:           Number(headCount),
+        dafac_number:        dafacNumber as string,
+        tenurial_status:     tenurialStatus ?? null,
+        assistance_amount:   assistanceAmount,
+        is_senior:           Boolean(isSenior),
+        is_pwd:              Boolean(isPwd),
+        is_pregnant:         Boolean(isPregnant),
+        disbursed:           false,
         registeredAt:        now,
       })
       .select()

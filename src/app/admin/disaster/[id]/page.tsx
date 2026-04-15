@@ -1,5 +1,6 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import Link from "next/link";
 import {
   ArrowLeft, Flame, MapPin, Calendar, Users,
@@ -13,7 +14,10 @@ import {
 } from "@/components/disaster/CenterActions";
 import { CenterQRCode } from "@/components/disaster/CenterQRCode";
 import { DistributeButton } from "@/components/disaster/DistributeButton";
+import PayrollPanel from "@/components/disaster/PayrollPanel";
+import VoucherIssuancePanel from "@/components/disaster/VoucherIssuancePanel";
 import type { Metadata } from "next";
+import type { Role } from "@/types";
 
 export const metadata: Metadata = { title: "Incident Detail — MISP Admin" };
 
@@ -32,17 +36,53 @@ const STATUS_COLORS: Record<string, string> = {
   RESOLVED:   "bg-green-100 text-green-700",
 };
 
+const TENURIAL_LABELS: Record<string, string> = {
+  OWNER:     "Owner",
+  RENTER:    "Renter",
+  SHARER:    "Sharer",
+  BEDSPACER: "Bedspacer",
+};
+
+interface EvacueeRow {
+  id:              string;
+  name:            string;
+  age?:            number;
+  barangay?:       string;
+  headCount:       number;
+  dafacNumber?:    string | null;
+  tenurialStatus?: string | null;
+  assistanceAmount?: number | null;
+  isSenior?:       boolean;
+  isPwd?:          boolean;
+  isPregnant?:     boolean;
+}
+
 export default async function DisasterDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const db = await createClient();
+
+  // Auth
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const db = createAdminClient();
+  const { data: dbUser } = await db
+    .from("users")
+    .select("id, role")
+    .eq("supabaseId", user.id)
+    .single();
+  if (!dbUser) redirect("/login");
 
   const [{ data: incident }, { data: centers }, { data: inventory }] = await Promise.all([
     db.from("disaster_incidents").select("*").eq("id", id).single(),
-    db.from("evacuation_centers").select("*, evacuees(*)").eq("disasterIncidentId", id).order("createdAt", { ascending: true }),
+    db.from("evacuation_centers")
+      .select("*, evacuees(id,name,age,barangay,headCount,dafacNumber,tenurialStatus,assistanceAmount,isSenior,isPwd,isPregnant)")
+      .eq("disasterIncidentId", id)
+      .order("createdAt", { ascending: true }),
     db.from("relief_inventory").select("*").eq("disasterIncidentId", id).order("createdAt", { ascending: false }),
   ]);
 
@@ -54,12 +94,25 @@ export default async function DisasterDetailPage({
   const totalEvacuees = allCenters.reduce((sum, c) => sum + (c.currentHeadcount ?? 0), 0);
   const totalCapacity = allCenters.reduce((sum, c) => sum + (c.capacity ?? 0), 0);
 
-  // Inventory stock calculations
   const lowStockCount = allInventory.filter((item) => {
     const remaining = (item.quantityAvailable ?? 0) - (item.quantityDistributed ?? 0);
     const pct = item.quantityAvailable > 0 ? (remaining / item.quantityAvailable) * 100 : 0;
     return pct < 20;
   }).length;
+
+  // Build centers list with evacuees for VoucherIssuancePanel
+  const centersForVoucher = allCenters.map((c) => ({
+    id:       c.id,
+    name:     c.name,
+    evacuees: (c.evacuees ?? []) as { id: string; name: string }[],
+  }));
+
+  const inventoryForVoucher = allInventory.map((item) => ({
+    id:                  item.id,
+    itemName:            item.itemName,
+    quantityAvailable:   item.quantityAvailable ?? 0,
+    quantityDistributed: item.quantityDistributed ?? 0,
+  }));
 
   return (
     <div className="p-6 space-y-8">
@@ -133,9 +186,9 @@ export default async function DisasterDetailPage({
         ) : (
           <div className="space-y-4">
             {allCenters.map((center) => {
-              const pct    = Math.min(Math.round(((center.currentHeadcount ?? 0) / (center.capacity || 1)) * 100), 100);
-              const isFull = pct >= 100;
-              const evacueeList = (center.evacuees ?? []) as { id: string; name: string; age?: number; barangay?: string; headCount: number }[];
+              const pct      = Math.min(Math.round(((center.currentHeadcount ?? 0) / (center.capacity || 1)) * 100), 100);
+              const isFull   = pct >= 100;
+              const evacueeList = (center.evacuees ?? []) as EvacueeRow[];
 
               return (
                 <div key={center.id} className="border border-gray-100 dark:border-slate-700 rounded-xl overflow-hidden">
@@ -154,9 +207,7 @@ export default async function DisasterDetailPage({
                       <span className="text-xs text-gray-500 dark:text-slate-400">
                         {center.currentHeadcount}/{center.capacity}
                       </span>
-                      {/* QR Code button */}
                       <CenterQRCode centerId={center.id} centerName={center.name} />
-                      {/* Print List */}
                       <Link
                         href={`/admin/disaster/${id}/print?center=${center.id}`}
                         target="_blank"
@@ -180,7 +231,7 @@ export default async function DisasterDetailPage({
 
                   {/* Evacuees table */}
                   {evacueeList.length > 0 && (
-                    <div className="px-5 py-3 bg-white dark:bg-slate-900">
+                    <div className="px-5 py-3 bg-white dark:bg-slate-900 overflow-x-auto">
                       <p className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wide mb-2">
                         Registered Evacuees
                       </p>
@@ -190,7 +241,11 @@ export default async function DisasterDetailPage({
                             <th className="py-1 pr-4 font-semibold">Name</th>
                             <th className="py-1 pr-4 font-semibold">Age</th>
                             <th className="py-1 pr-4 font-semibold">Home Brgy.</th>
-                            <th className="py-1 font-semibold">Family Members</th>
+                            <th className="py-1 pr-4 font-semibold">Family</th>
+                            <th className="py-1 pr-4 font-semibold">DAFAC No.</th>
+                            <th className="py-1 pr-4 font-semibold">Tenurial</th>
+                            <th className="py-1 pr-4 font-semibold">Assistance</th>
+                            <th className="py-1 font-semibold">Flags</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50 dark:divide-slate-800">
@@ -199,7 +254,25 @@ export default async function DisasterDetailPage({
                               <td className="py-1.5 pr-4 font-medium text-gray-900 dark:text-white">{ev.name}</td>
                               <td className="py-1.5 pr-4 text-gray-500 dark:text-slate-400">{ev.age ?? "—"}</td>
                               <td className="py-1.5 pr-4 text-gray-500 dark:text-slate-400">{ev.barangay ?? "—"}</td>
-                              <td className="py-1.5 text-gray-500 dark:text-slate-400">{ev.headCount}</td>
+                              <td className="py-1.5 pr-4 text-gray-500 dark:text-slate-400">{ev.headCount}</td>
+                              <td className="py-1.5 pr-4 font-mono text-makati-blue font-semibold">
+                                {ev.dafacNumber ?? <span className="text-gray-300 dark:text-slate-600">—</span>}
+                              </td>
+                              <td className="py-1.5 pr-4 text-gray-500 dark:text-slate-400">
+                                {ev.tenurialStatus ? TENURIAL_LABELS[ev.tenurialStatus] ?? ev.tenurialStatus : "—"}
+                              </td>
+                              <td className="py-1.5 pr-4 text-gray-900 dark:text-white font-medium">
+                                {ev.assistanceAmount != null
+                                  ? `₱${Number(ev.assistanceAmount).toLocaleString("en-PH")}`
+                                  : <span className="text-gray-300 dark:text-slate-600">—</span>
+                                }
+                              </td>
+                              <td className="py-1.5 flex gap-1 flex-wrap">
+                                {ev.isSenior  && <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-bold text-[10px]">S</span>}
+                                {ev.isPwd     && <span className="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-bold text-[10px]">PWD</span>}
+                                {ev.isPregnant && <span className="bg-pink-100 text-pink-700 px-1.5 py-0.5 rounded font-bold text-[10px]">P</span>}
+                                {!ev.isSenior && !ev.isPwd && !ev.isPregnant && <span className="text-gray-300 dark:text-slate-600">—</span>}
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -233,7 +306,6 @@ export default async function DisasterDetailPage({
           <AddInventoryForm incidentId={id} />
         </div>
 
-        {/* Summary bar */}
         {allInventory.length > 0 && (
           <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-slate-400">
             <span>{allInventory.length} item{allInventory.length !== 1 ? "s" : ""}</span>
@@ -308,6 +380,16 @@ export default async function DisasterDetailPage({
           </div>
         )}
       </section>
+
+      {/* ── Calamity Payroll ──────────────────────────────────────────────── */}
+      <PayrollPanel incidentId={id} adminRole={dbUser.role as Role} />
+
+      {/* ── Relief Vouchers ───────────────────────────────────────────────── */}
+      <VoucherIssuancePanel
+        incidentId={id}
+        centers={centersForVoucher}
+        inventory={inventoryForVoucher}
+      />
 
     </div>
   );

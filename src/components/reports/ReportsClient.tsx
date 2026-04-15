@@ -13,6 +13,8 @@ import {
 import {
   getApplicationsForExport,
   getResidentsForExport,
+  getDafacExportData,
+  getPayrollExportData,
   type AppExportRow,
 } from "@/app/admin/reports/actions";
 
@@ -40,8 +42,7 @@ function buildApplicationsCSV(applications: AppExportRow[]) {
     "Program",
     "Purpose",
     "Status",
-    "Amount Requested",
-    "Amount Approved",
+    "Standard Assistance Distributed (PHP)",
     "Date Submitted",
     "Last Updated",
   ];
@@ -53,7 +54,6 @@ function buildApplicationsCSV(applications: AppExportRow[]) {
     a.programName,
     a.purpose,
     a.status,
-    a.amountRequested?.toString() ?? "",
     a.amountApproved?.toString() ?? "",
     new Date(a.createdAt).toLocaleDateString("en-PH"),
     new Date(a.updatedAt).toLocaleDateString("en-PH"),
@@ -61,16 +61,34 @@ function buildApplicationsCSV(applications: AppExportRow[]) {
   return { headers, rows };
 }
 
+interface IncidentOption {
+  id:    string;
+  title: string;
+}
+
+interface PayrollBatchOption {
+  id:            string;
+  batchNumber:   string;
+  status:        string;
+  incidentTitle: string;
+}
+
 export default function ReportsClient({
   statusCounts,
   totalDisbursed,
   totalResidents,
+  incidents,
+  payrollBatches,
 }: {
-  statusCounts: Record<string, number>;
+  statusCounts:   Record<string, number>;
   totalDisbursed: number;
   totalResidents: number;
+  incidents:      IncidentOption[];
+  payrollBatches: PayrollBatchOption[];
 }) {
-  const [exporting, setExporting] = useState<string | null>(null);
+  const [exporting,        setExporting]        = useState<string | null>(null);
+  const [selectedIncident, setSelectedIncident] = useState("");
+  const [selectedBatch,    setSelectedBatch]    = useState("");
   const totalApps = Object.values(statusCounts).reduce((a, b) => a + b, 0);
 
   async function exportApplicationsCSV() {
@@ -114,6 +132,49 @@ export default function ReportsClient({
     }
   }
 
+  async function exportDafacList() {
+    if (!selectedIncident) return;
+    setExporting("dafac");
+    try {
+      const rows = await getDafacExportData(selectedIncident);
+      if (!rows) return;
+      const headers = [
+        "DAFAC No.", "Name", "Age", "Home Barangay",
+        "Tenurial Status", "Assistance Amount (PHP)",
+        "Senior", "PWD", "Pregnant", "Disbursed",
+        "Center", "Incident",
+      ];
+      const csvRows = rows.map((r) => [
+        r.dafacNumber, r.name, r.age?.toString() ?? "", r.barangay ?? "",
+        r.tenurialStatus, r.assistanceAmount.toString(),
+        r.isSenior ? "Yes" : "No", r.isPwd ? "Yes" : "No",
+        r.isPregnant ? "Yes" : "No", r.disbursed ? "Yes" : "No",
+        r.centerName, r.incidentTitle,
+      ]);
+      downloadCSV(`dafac_list_${new Date().toISOString().slice(0, 10)}.csv`, csvRows, headers);
+    } finally {
+      setExporting(null);
+    }
+  }
+
+  async function exportPayroll() {
+    if (!selectedBatch) return;
+    setExporting("payroll");
+    try {
+      const rows = await getPayrollExportData(selectedBatch);
+      if (!rows) return;
+      const headers = ["DAFAC No.", "Name", "Amount (PHP)", "Method", "Disbursed At"];
+      const csvRows = rows.map((r) => [
+        r.dafacNumber ?? "", r.name,
+        r.amount.toString(), r.disburseMethod,
+        r.disbursedAt ? new Date(r.disbursedAt).toLocaleDateString("en-PH") : "",
+      ]);
+      downloadCSV(`payroll_${selectedBatch.slice(0, 8)}_${new Date().toISOString().slice(0, 10)}.csv`, csvRows, headers);
+    } finally {
+      setExporting(null);
+    }
+  }
+
   async function exportByStatus(status: string) {
     setExporting(status);
     try {
@@ -125,7 +186,7 @@ export default function ReportsClient({
         "Applicant Name",
         "Barangay",
         "Program",
-        "Amount Approved",
+        "Standard Assistance Distributed (PHP)",
         "Date Submitted",
       ];
       const rows = filtered.map((a) => [
@@ -210,7 +271,7 @@ export default function ReportsClient({
       {/* Total Disbursed */}
       <div className="card p-6 border-l-4 border-l-makati-gold">
         <p className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wide">
-          Total Amount Disbursed
+          Total Standard Assistance Distributed
         </p>
         <p className="text-3xl font-extrabold text-gray-900 dark:text-white mt-1">
           {"\u20B1"}{" "}
@@ -299,6 +360,68 @@ export default function ReportsClient({
                 </button>
               ))}
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Disaster Reports */}
+      <div>
+        <h2 className="text-base font-bold text-gray-900 dark:text-white mb-3">
+          Disaster Reports
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* DAFAC List Export */}
+          <div className="card p-5">
+            <h3 className="font-semibold text-gray-900 dark:text-white mb-1">DAFAC Evacuee List</h3>
+            <p className="text-xs text-gray-400 dark:text-slate-500 mb-3">
+              Export all DAFAC-registered evacuees for a specific incident
+            </p>
+            <select
+              value={selectedIncident}
+              onChange={(e) => setSelectedIncident(e.target.value)}
+              className="w-full border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-white mb-3"
+            >
+              <option value="">Select incident…</option>
+              {incidents.map((inc) => (
+                <option key={inc.id} value={inc.id}>{inc.title}</option>
+              ))}
+            </select>
+            <button
+              onClick={exportDafacList}
+              disabled={exporting !== null || !selectedIncident}
+              className="w-full flex items-center justify-center gap-2 btn-primary disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {exporting === "dafac" ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
+              {exporting === "dafac" ? "Exporting…" : "Export DAFAC List CSV"}
+            </button>
+          </div>
+
+          {/* Payroll Batch Export */}
+          <div className="card p-5">
+            <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Payroll Batch</h3>
+            <p className="text-xs text-gray-400 dark:text-slate-500 mb-3">
+              Export a payroll batch with per-evacuee disbursement details
+            </p>
+            <select
+              value={selectedBatch}
+              onChange={(e) => setSelectedBatch(e.target.value)}
+              className="w-full border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-white mb-3"
+            >
+              <option value="">Select payroll batch…</option>
+              {payrollBatches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.batchNumber} — {b.incidentTitle} ({b.status})
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={exportPayroll}
+              disabled={exporting !== null || !selectedBatch}
+              className="w-full flex items-center justify-center gap-2 btn-primary disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {exporting === "payroll" ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
+              {exporting === "payroll" ? "Exporting…" : "Export Payroll CSV"}
+            </button>
           </div>
         </div>
       </div>

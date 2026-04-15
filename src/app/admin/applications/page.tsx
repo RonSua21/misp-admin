@@ -27,7 +27,7 @@ export default async function ApplicationsPage({
   let query = db
     .from("applications")
     .select(
-      "id, referenceNumber, applicantName, applicantBarangay, applicantContact, status, createdAt, updatedAt, benefitProgramId, purpose, amountRequested, amountApproved",
+      "id, referenceNumber, applicantName, applicantBarangay, applicantContact, status, createdAt, updatedAt, benefitProgramId, purpose, amountApproved",
       { count: "exact" }
     )
     .order("createdAt", { ascending: false })

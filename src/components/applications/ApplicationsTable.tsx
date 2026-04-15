@@ -33,7 +33,6 @@ type App = {
   updatedAt: string;
   programName: string;
   purpose: string;
-  amountRequested?: number | null;
 };
 
 export default function ApplicationsTable({
@@ -123,7 +122,6 @@ export default function ApplicationsTable({
                   "Applicant",
                   "Barangay",
                   "Program",
-                  "Amount",
                   "Date",
                   "Status",
                   "",
@@ -141,7 +139,7 @@ export default function ApplicationsTable({
               {applications.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={7}
                     className="px-6 py-12 text-center text-gray-400 dark:text-slate-500"
                   >
                     No applications found.
@@ -171,11 +169,6 @@ export default function ApplicationsTable({
                     </td>
                     <td className="px-4 py-3.5 text-gray-600 dark:text-slate-300 whitespace-nowrap">
                       {app.programName}
-                    </td>
-                    <td className="px-4 py-3.5 text-gray-500 dark:text-slate-400 whitespace-nowrap">
-                      {app.amountRequested
-                        ? `\u20B1${app.amountRequested.toLocaleString()}`
-                        : "—"}
                     </td>
                     <td className="px-4 py-3.5 text-gray-500 dark:text-slate-400 whitespace-nowrap">
                       {new Date(app.createdAt).toLocaleDateString("en-PH", {

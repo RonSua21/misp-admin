@@ -65,6 +65,14 @@ export default async function ReportsPage() {
     0
   );
 
+  // Fetch incidents and payroll batches for disaster exports
+  const [{ data: incidents }, { data: payrollBatches }] = await Promise.all([
+    db.from("disaster_incidents").select("id, title").order("reportedAt", { ascending: false }),
+    db.from("payroll_batches")
+      .select("id, batchNumber, status, disaster_incidents(title)")
+      .order("created_at", { ascending: false }),
+  ]);
+
   return (
     <div>
       <TopBar
@@ -76,6 +84,13 @@ export default async function ReportsPage() {
           statusCounts={statusCounts}
           totalDisbursed={totalDisbursed}
           totalResidents={totalResidents ?? 0}
+          incidents={incidents ?? []}
+          payrollBatches={(payrollBatches ?? []).map((b) => ({
+            id:           b.id,
+            batchNumber:  b.batchNumber,
+            status:       b.status,
+            incidentTitle: (Array.isArray(b.disaster_incidents) ? b.disaster_incidents[0] : b.disaster_incidents)?.title ?? "—",
+          }))}
         />
       </div>
     </div>

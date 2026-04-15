@@ -4,13 +4,13 @@ import { useRouter } from "next/navigation";
 import { Plus, Users, Package } from "lucide-react";
 
 const BARANGAYS = [
-  "Bangkal","Bel-Air","Carmona","Cembo","Comembo","Dasmariñas",
-  "East Rembo","Forbes Park","Guadalupe Nuevo","Guadalupe Viejo",
-  "Kasilawan","La Paz","Magallanes","Olympia","Palanan","Pembo",
-  "Pinagkaisahan","Pio del Pilar","Pitogo","Poblacion",
-  "Post Proper Northside","Post Proper Southside","Rizal","San Antonio",
-  "San Isidro","San Lorenzo","Santa Cruz","Singkamas","South Cembo",
-  "Tejeros","Ugong Norte","Urdaneta","West Rembo",
+  // District 1
+  "Bangkal","Bel-Air","Carmona","Dasmariñas","Forbes Park",
+  "Kasilawan","La Paz","Magallanes","Olympia","Palanan",
+  "Pio del Pilar","Poblacion","San Antonio","San Isidro","San Lorenzo",
+  "Santa Cruz","Singkamas","Tejeros","Urdaneta","Valenzuela",
+  // District 2
+  "Guadalupe Nuevo","Guadalupe Viejo","Pinagkaisahan",
 ];
 
 // ── Add Center Form ──────────────────────────────────────────────────────────
@@ -105,11 +105,16 @@ export function AddEvacueeForm({
   const [busy,  setBusy]  = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [centerId,  setCenterId]  = useState(centers[0]?.id ?? "");
-  const [name,      setName]      = useState("");
-  const [age,       setAge]       = useState("");
-  const [barangay,  setBarangay]  = useState("");
-  const [headCount, setHeadCount] = useState("1");
+  const [centerId,        setCenterId]       = useState(centers[0]?.id ?? "");
+  const [name,            setName]           = useState("");
+  const [age,             setAge]            = useState("");
+  const [barangay,        setBarangay]       = useState("");
+  const [headCount,       setHeadCount]      = useState("1");
+  // DAFAC fields
+  const [tenurialStatus,  setTenurialStatus] = useState("");
+  const [isSenior,        setIsSenior]       = useState(false);
+  const [isPwd,           setIsPwd]          = useState(false);
+  const [isPregnant,      setIsPregnant]     = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -120,7 +125,17 @@ export function AddEvacueeForm({
     const res = await fetch(`/api/admin/disaster/${incidentId}/evacuees`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ evacuationCenterId: centerId, name, age: age ? Number(age) : null, barangay: barangay || null, headCount: Number(headCount) }),
+      body: JSON.stringify({
+        evacuationCenterId: centerId,
+        name,
+        age:            age ? Number(age) : null,
+        barangay:       barangay || null,
+        headCount:      Number(headCount),
+        tenurialStatus: tenurialStatus || null,
+        isSenior,
+        isPwd,
+        isPregnant,
+      }),
     });
 
     if (!res.ok) {
@@ -132,6 +147,7 @@ export function AddEvacueeForm({
     router.refresh();
     setOpen(false);
     setName(""); setAge(""); setBarangay(""); setHeadCount("1");
+    setTenurialStatus(""); setIsSenior(false); setIsPwd(false); setIsPregnant(false);
   }
 
   if (!open) {
@@ -147,7 +163,7 @@ export function AddEvacueeForm({
 
   return (
     <div className="mt-4 p-4 bg-gray-50 dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 space-y-3">
-      <p className="text-sm font-semibold text-gray-700 dark:text-white">Register Evacuee</p>
+      <p className="text-sm font-semibold text-gray-700 dark:text-white">Register Evacuee (DAFAC)</p>
       {error && <p className="text-xs text-red-600">{error}</p>}
       <form onSubmit={handleSubmit} className="space-y-3">
         <div className="grid sm:grid-cols-2 gap-3">
@@ -161,7 +177,35 @@ export function AddEvacueeForm({
             {BARANGAYS.map((b) => <option key={b} value={b}>{b}</option>)}
           </select>
           <input className="border border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-white rounded-lg px-3 py-2 text-sm w-full" type="number" min="1" placeholder="Family members (headcount)" value={headCount} onChange={(e) => setHeadCount(e.target.value)} disabled={busy} />
+          {/* DAFAC — Tenurial Status */}
+          <select className="border border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-white rounded-lg px-3 py-2 text-sm w-full" value={tenurialStatus} onChange={(e) => setTenurialStatus(e.target.value)} disabled={busy}>
+            <option value="">— Tenurial Status (for DAFAC) —</option>
+            <option value="OWNER">Home Owner</option>
+            <option value="RENTER">Renter</option>
+            <option value="SHARER">Sharer</option>
+            <option value="BEDSPACER">Bedspacer</option>
+          </select>
         </div>
+        {/* Vulnerability flags */}
+        <div className="flex flex-wrap gap-4 text-sm">
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input type="checkbox" checked={isSenior} onChange={(e) => setIsSenior(e.target.checked)} disabled={busy} className="accent-makati-blue" />
+            Senior Citizen
+          </label>
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input type="checkbox" checked={isPwd} onChange={(e) => setIsPwd(e.target.checked)} disabled={busy} className="accent-makati-blue" />
+            PWD
+          </label>
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input type="checkbox" checked={isPregnant} onChange={(e) => setIsPregnant(e.target.checked)} disabled={busy} className="accent-makati-blue" />
+            Pregnant
+          </label>
+        </div>
+        {tenurialStatus && (
+          <p className="text-xs text-gray-500 dark:text-slate-400 italic">
+            Assistance amount will be auto-assigned from DAFAC config based on tenurial status.
+          </p>
+        )}
         <div className="flex gap-2">
           <button type="submit" disabled={busy} className="bg-amber-500 text-white text-xs font-semibold px-4 py-1.5 rounded-lg hover:bg-amber-600 disabled:opacity-50">{busy ? "Saving…" : "Register"}</button>
           <button type="button" onClick={() => setOpen(false)} disabled={busy} className="text-xs text-gray-500 dark:text-slate-400 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-slate-600">Cancel</button>

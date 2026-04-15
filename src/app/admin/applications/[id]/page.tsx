@@ -4,16 +4,19 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, User, MapPin, Phone, Calendar, FileText, DollarSign } from "lucide-react";
 import TopBar from "@/components/layout/TopBar";
-import StatusUpdateForm from "@/components/applications/StatusUpdateForm";
-import type { ApplicationStatus } from "@/types";
+import ApprovalFlow from "@/components/applications/ApprovalFlow";
+import VoterStatusBadge from "@/components/applications/VoterStatusBadge";
+import IdIssuancePanel from "@/components/applications/IdIssuancePanel";
+import AuditPhotoUpload from "@/components/shared/AuditPhotoUpload";
+import type { ApplicationStatus, BenefitCategory, ApprovalLevel, VoterStatus, Role } from "@/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 const STATUS_COLORS: Record<ApplicationStatus, string> = {
-  PENDING: "bg-yellow-100 text-yellow-800",
+  PENDING:      "bg-yellow-100 text-yellow-800",
   UNDER_REVIEW: "bg-blue-100 text-blue-800",
-  APPROVED: "bg-green-100 text-green-800",
-  REJECTED: "bg-red-100 text-red-800",
-  DISBURSED: "bg-purple-100 text-purple-800",
+  APPROVED:     "bg-green-100 text-green-800",
+  REJECTED:     "bg-red-100 text-red-800",
+  DISBURSED:    "bg-purple-100 text-purple-800",
 };
 
 export default async function ApplicationDetailPage({
@@ -23,15 +26,13 @@ export default async function ApplicationDetailPage({
 }) {
   const { id } = await params;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
   const db = createAdminClient();
   const { data: dbUser } = await db
     .from("users")
-    .select("role, barangay")
+    .select("id, role, barangay")
     .eq("supabaseId", user.id)
     .single();
   if (!dbUser) redirect("/login");
@@ -53,28 +54,28 @@ export default async function ApplicationDetailPage({
     redirect("/admin/applications");
   }
 
-  const { data: program } = await db
-    .from("benefit_programs")
-    .select("name, category, description, maxAmount")
-    .eq("id", app.benefitProgramId)
-    .single();
-
-  const { data: applicantUser } = await db
-    .from("users")
-    .select("firstName, lastName, email, phone, residencyVerified, createdAt")
-    .eq("id", app.userId)
-    .maybeSingle();
-
-  const { data: statusHistory } = await db
-    .from("application_status_history")
-    .select("id, fromStatus, toStatus, changedAt, remarks, changedBy")
-    .eq("applicationId", id)
-    .order("changedAt", { ascending: false });
-
-  const { data: documents } = await db
-    .from("documents")
-    .select("id, documentType, fileUrl, status, createdAt")
-    .eq("applicationId", id);
+  const [
+    { data: program },
+    { data: applicantUser },
+    { data: statusHistory },
+    { data: documents },
+  ] = await Promise.all([
+    db.from("benefit_programs")
+      .select("name, category, description, maxAmount")
+      .eq("id", app.benefitProgramId)
+      .single(),
+    db.from("users")
+      .select("firstName, lastName, email, phone, residencyVerified, createdAt")
+      .eq("id", app.userId)
+      .maybeSingle(),
+    db.from("application_status_history")
+      .select("id, fromStatus, toStatus, changedAt, remarks, approvalLevel, rejectionCode")
+      .eq("applicationId", id)
+      .order("changedAt", { ascending: false }),
+    db.from("documents")
+      .select("id, documentType, fileUrl, status, createdAt")
+      .eq("applicationId", id),
+  ]);
 
   return (
     <div>
@@ -99,11 +100,7 @@ export default async function ApplicationDetailPage({
                 <span className="font-mono text-sm text-makati-blue font-bold bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded">
                   {app.referenceNumber}
                 </span>
-                <span
-                  className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                    STATUS_COLORS[app.status as ApplicationStatus]
-                  }`}
-                >
+                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[app.status as ApplicationStatus]}`}>
                   {app.status.replace(/_/g, " ")}
                 </span>
               </div>
@@ -130,24 +127,10 @@ export default async function ApplicationDetailPage({
               </div>
             </div>
             <div className="text-right">
-              {app.amountRequested && (
-                <div>
-                  <p className="text-xs text-gray-400 dark:text-slate-500">
-                    Amount Requested
-                  </p>
-                  <p className="text-lg font-bold text-gray-900 dark:text-white">
-                    {formatCurrency(app.amountRequested)}
-                  </p>
-                </div>
-              )}
               {app.amountApproved && (
-                <div className="mt-1">
-                  <p className="text-xs text-gray-400 dark:text-slate-500">
-                    Amount Approved
-                  </p>
-                  <p className="text-lg font-bold text-green-600">
-                    {formatCurrency(app.amountApproved)}
-                  </p>
+                <div>
+                  <p className="text-xs text-gray-400 dark:text-slate-500">Standard Benefit Assigned</p>
+                  <p className="text-lg font-bold text-green-600">{formatCurrency(app.amountApproved)}</p>
                 </div>
               )}
             </div>
@@ -155,7 +138,7 @@ export default async function ApplicationDetailPage({
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left column */}
+          {/* ── Left column ──────────────────────────────────────────── */}
           <div className="lg:col-span-2 space-y-6">
             {/* Application details */}
             <div className="card p-6">
@@ -168,9 +151,7 @@ export default async function ApplicationDetailPage({
                   <p className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wide mb-1">
                     Benefit Program
                   </p>
-                  <p className="text-gray-900 dark:text-white font-medium">
-                    {program?.name ?? "—"}
-                  </p>
+                  <p className="text-gray-900 dark:text-white font-medium">{program?.name ?? "—"}</p>
                   {program?.category && (
                     <p className="text-xs text-gray-400 dark:text-slate-500">
                       {program.category.replace(/_/g, " ")}
@@ -181,9 +162,7 @@ export default async function ApplicationDetailPage({
                   <p className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wide mb-1">
                     Purpose / Reason
                   </p>
-                  <p className="text-gray-700 dark:text-slate-300 text-sm leading-relaxed">
-                    {app.purpose}
-                  </p>
+                  <p className="text-gray-700 dark:text-slate-300 text-sm leading-relaxed">{app.purpose}</p>
                 </div>
                 {app.remarks && (
                   <div>
@@ -200,20 +179,13 @@ export default async function ApplicationDetailPage({
 
             {/* Documents */}
             <div className="card p-6">
-              <h3 className="font-bold text-gray-900 dark:text-white mb-4">
-                Submitted Documents
-              </h3>
+              <h3 className="font-bold text-gray-900 dark:text-white mb-4">Submitted Documents</h3>
               {!documents || documents.length === 0 ? (
-                <p className="text-sm text-gray-400 dark:text-slate-500">
-                  No documents submitted.
-                </p>
+                <p className="text-sm text-gray-400 dark:text-slate-500">No documents submitted.</p>
               ) : (
                 <div className="space-y-2">
                   {documents.map((doc) => (
-                    <div
-                      key={doc.id}
-                      className="flex items-center justify-between p-3 bg-gray-50 dark:bg-slate-700/50 rounded-lg"
-                    >
+                    <div key={doc.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-slate-700/50 rounded-lg">
                       <div>
                         <p className="text-sm font-medium text-gray-900 dark:text-white">
                           {doc.documentType.replace(/_/g, " ")}
@@ -223,23 +195,15 @@ export default async function ApplicationDetailPage({
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span
-                          className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                            doc.status === "VERIFIED"
-                              ? "bg-green-100 text-green-800"
-                              : doc.status === "REJECTED"
-                              ? "bg-red-100 text-red-800"
-                              : "bg-yellow-100 text-yellow-800"
-                          }`}
-                        >
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                          doc.status === "VERIFIED" ? "bg-green-100 text-green-800"
+                          : doc.status === "REJECTED" ? "bg-red-100 text-red-800"
+                          : "bg-yellow-100 text-yellow-800"
+                        }`}>
                           {doc.status}
                         </span>
-                        <a
-                          href={doc.fileUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-makati-blue hover:underline font-medium"
-                        >
+                        <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer"
+                          className="text-xs text-makati-blue hover:underline font-medium">
                           View
                         </a>
                       </div>
@@ -249,37 +213,41 @@ export default async function ApplicationDetailPage({
               )}
             </div>
 
+            {/* Audit Photos (COA compliance) */}
+            <div className="card p-6">
+              <h3 className="font-bold text-gray-900 dark:text-white mb-4">Audit Photos</h3>
+              <AuditPhotoUpload entityType="APPLICATION" entityId={id} />
+            </div>
+
+            {/* ID / Booklet Issuance (only when approved) */}
+            <IdIssuancePanel applicationId={id} status={app.status as ApplicationStatus} />
+
             {/* Status History */}
             <div className="card p-6">
-              <h3 className="font-bold text-gray-900 dark:text-white mb-4">
-                Status History
-              </h3>
+              <h3 className="font-bold text-gray-900 dark:text-white mb-4">Approval History</h3>
               {!statusHistory || statusHistory.length === 0 ? (
-                <p className="text-sm text-gray-400 dark:text-slate-500">
-                  No status changes recorded.
-                </p>
+                <p className="text-sm text-gray-400 dark:text-slate-500">No status changes recorded.</p>
               ) : (
                 <div className="space-y-3">
                   {statusHistory.map((entry) => (
-                    <div
-                      key={entry.id}
-                      className="flex gap-3 text-sm"
-                    >
+                    <div key={entry.id} className="flex gap-3 text-sm">
                       <div className="w-1.5 h-1.5 rounded-full bg-makati-blue mt-1.5 shrink-0" />
                       <div>
                         <p className="text-gray-900 dark:text-white">
-                          <span className="font-semibold">
-                            {entry.fromStatus?.replace(/_/g, " ") ?? "Created"}
-                          </span>{" "}
-                          &rarr;{" "}
-                          <span className="font-semibold">
-                            {entry.toStatus.replace(/_/g, " ")}
-                          </span>
+                          <span className="font-semibold">{entry.fromStatus?.replace(/_/g, " ") ?? "Created"}</span>
+                          {" → "}
+                          <span className="font-semibold">{entry.toStatus.replace(/_/g, " ")}</span>
+                          {entry.approvalLevel !== null && entry.approvalLevel !== undefined && (
+                            <span className="ml-2 text-xs text-gray-400">(Level {entry.approvalLevel})</span>
+                          )}
                         </p>
-                        {entry.remarks && (
-                          <p className="text-gray-500 dark:text-slate-400 text-xs mt-0.5">
-                            &quot;{entry.remarks}&quot;
+                        {entry.rejectionCode && (
+                          <p className="text-xs text-red-600 mt-0.5">
+                            Reason: {entry.rejectionCode.replace(/_/g, " ")}
                           </p>
+                        )}
+                        {entry.remarks && (
+                          <p className="text-gray-500 dark:text-slate-400 text-xs mt-0.5">&quot;{entry.remarks}&quot;</p>
                         )}
                         <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">
                           {formatDate(entry.changedAt)}
@@ -292,105 +260,90 @@ export default async function ApplicationDetailPage({
             </div>
           </div>
 
-          {/* Right column */}
+          {/* ── Right column ──────────────────────────────────────────── */}
           <div className="space-y-6">
-            {/* Applicant info */}
+            {/* Applicant account */}
             {applicantUser && (
               <div className="card p-6">
                 <h3 className="font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                   <User className="w-4 h-4 text-makati-blue" />
                   Applicant Account
                 </h3>
-                <div className="space-y-2 text-sm">
+                <div className="space-y-3 text-sm">
                   <div>
-                    <p className="text-xs text-gray-400 dark:text-slate-500">
-                      Full Name
-                    </p>
+                    <p className="text-xs text-gray-400 dark:text-slate-500">Full Name</p>
                     <p className="font-medium text-gray-900 dark:text-white">
                       {applicantUser.firstName} {applicantUser.lastName}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-400 dark:text-slate-500">
-                      Email
-                    </p>
-                    <p className="text-gray-700 dark:text-slate-300">
-                      {applicantUser.email}
-                    </p>
+                    <p className="text-xs text-gray-400 dark:text-slate-500">Email</p>
+                    <p className="text-gray-700 dark:text-slate-300">{applicantUser.email}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-400 dark:text-slate-500">
-                      Residency
-                    </p>
-                    <span
-                      className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                        applicantUser.residencyVerified
-                          ? "bg-green-100 text-green-800"
-                          : "bg-yellow-100 text-yellow-800"
-                      }`}
-                    >
-                      {applicantUser.residencyVerified
-                        ? "Verified"
-                        : "Unverified"}
+                    <p className="text-xs text-gray-400 dark:text-slate-500 mb-1">Residency</p>
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                      applicantUser.residencyVerified ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
+                    }`}>
+                      {applicantUser.residencyVerified ? "Verified" : "Unverified"}
                     </span>
                   </div>
+                  {/* Voter status badge */}
                   <div>
-                    <p className="text-xs text-gray-400 dark:text-slate-500">
-                      Member Since
-                    </p>
-                    <p className="text-gray-700 dark:text-slate-300">
-                      {formatDate(applicantUser.createdAt)}
-                    </p>
+                    <p className="text-xs text-gray-400 dark:text-slate-500 mb-1">Voter Status</p>
+                    <VoterStatusBadge
+                      applicationId={id}
+                      currentStatus={(app.voter_status ?? "UNKNOWN") as VoterStatus}
+                      adminRole={dbUser.role as Role}
+                    />
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-400 dark:text-slate-500">Member Since</p>
+                    <p className="text-gray-700 dark:text-slate-300">{formatDate(applicantUser.createdAt)}</p>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Financial summary */}
+            {/* Benefit assignment */}
             <div className="card p-6">
               <h3 className="font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                 <DollarSign className="w-4 h-4 text-makati-blue" />
-                Financial Summary
+                Benefit Assignment
               </h3>
               <div className="space-y-2 text-sm">
                 {program?.maxAmount && (
                   <div className="flex justify-between">
-                    <span className="text-gray-500 dark:text-slate-400">
-                      Program Max
-                    </span>
-                    <span className="font-medium text-gray-900 dark:text-white">
-                      {formatCurrency(program.maxAmount)}
-                    </span>
+                    <span className="text-gray-500 dark:text-slate-400">Standard Package</span>
+                    <span className="font-medium text-gray-900 dark:text-white">{formatCurrency(program.maxAmount)}</span>
                   </div>
                 )}
-                {app.amountRequested && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-500 dark:text-slate-400">
-                      Requested
-                    </span>
-                    <span className="font-medium text-gray-900 dark:text-white">
-                      {formatCurrency(app.amountRequested)}
-                    </span>
-                  </div>
-                )}
-                {app.amountApproved && (
+                {app.amountApproved ? (
                   <div className="flex justify-between border-t border-gray-100 dark:border-slate-700 pt-2">
-                    <span className="text-gray-500 dark:text-slate-400">
-                      Approved
-                    </span>
-                    <span className="font-bold text-green-600">
-                      {formatCurrency(app.amountApproved)}
-                    </span>
+                    <span className="text-gray-500 dark:text-slate-400">Assigned</span>
+                    <span className="font-bold text-green-600">{formatCurrency(app.amountApproved)}</span>
                   </div>
+                ) : (
+                  <p className="text-xs text-gray-400 dark:text-slate-500 italic pt-1">
+                    Benefit amount assigned upon final approval.
+                  </p>
                 )}
               </div>
             </div>
 
-            {/* Status Update Form */}
-            <StatusUpdateForm
-              applicationId={app.id}
-              currentStatus={app.status as ApplicationStatus}
-            />
+            {/* Multi-level approval flow */}
+            <div className="card p-6">
+              <h3 className="font-bold text-gray-900 dark:text-white mb-4">Approval Action</h3>
+              <ApprovalFlow
+                applicationId={id}
+                approvalLevel={(app.approval_level ?? 0) as ApprovalLevel}
+                status={app.status as ApplicationStatus}
+                voterStatus={(app.voter_status ?? "UNKNOWN") as VoterStatus}
+                orientationAttended={app.orientation_attended ?? false}
+                benefitCategory={(program?.category ?? "FINANCIAL_ASSISTANCE") as BenefitCategory}
+                adminRole={dbUser.role as Role}
+              />
+            </div>
           </div>
         </div>
       </div>

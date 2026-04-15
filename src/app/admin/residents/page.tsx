@@ -4,13 +4,14 @@ import { redirect } from "next/navigation";
 import TopBar from "@/components/layout/TopBar";
 import ResidentsTable from "@/components/residents/ResidentsTable";
 
-// Static list — Makati's 23 barangays (updated: EMBO barangays now under Taguig City).
 const MAKATI_BARANGAYS = [
+  // District 1
   "Bangkal", "Bel-Air", "Carmona", "Dasmariñas", "Forbes Park",
-  "Guadalupe Nuevo", "Guadalupe Viejo", "Kasilawan", "La Paz",
-  "Magallanes", "Olympia", "Palanan", "Pinagkaisahan", "Pio del Pilar",
-  "Poblacion", "San Antonio", "San Isidro", "San Lorenzo", "Santa Cruz",
-  "Singkamas", "Tejeros", "Urdaneta", "Valenzuela",
+  "Kasilawan", "La Paz", "Magallanes", "Olympia", "Palanan",
+  "Pio del Pilar", "Poblacion", "San Antonio", "San Isidro", "San Lorenzo",
+  "Santa Cruz", "Singkamas", "Tejeros", "Urdaneta", "Valenzuela",
+  // District 2
+  "Guadalupe Nuevo", "Guadalupe Viejo", "Pinagkaisahan",
 ];
 
 export default async function ResidentsPage({

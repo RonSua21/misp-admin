@@ -15,6 +15,7 @@ import {
   TrendingUp,
   Flame,
   Megaphone,
+  SlidersHorizontal,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -23,8 +24,9 @@ const staffNav = [
   { href: "/admin/applications", label: "Application Queue", icon: ClipboardList },
   { href: "/admin/residents",    label: "Residents",        icon: Users },
   { href: "/admin/documents",    label: "Documents",        icon: FileText },
-  { href: "/admin/disaster",       label: "Disaster & Relief",  icon: Flame },
-  { href: "/admin/announcements",  label: "Announcements",      icon: Megaphone },
+  { href: "/admin/disaster",             label: "Disaster & Relief",   icon: Flame },
+  { href: "/admin/disaster/dafac-config", label: "DAFAC Config",         icon: SlidersHorizontal },
+  { href: "/admin/announcements",        label: "Announcements",        icon: Megaphone },
   { href: "/admin/reports",        label: "Reports",            icon: BarChart2 },
 ];
 

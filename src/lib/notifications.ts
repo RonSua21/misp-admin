@@ -126,3 +126,4 @@ export async function notifyAdmins({
   const { error } = await db.from("notifications").insert(rows);
   if (error) console.error("[notifyAdmins]", error);
 }
+

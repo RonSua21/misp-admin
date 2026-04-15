@@ -8,13 +8,13 @@ const DISASTER_TYPES = [
 ] as const;
 
 const BARANGAYS = [
-  "Bangkal","Bel-Air","Carmona","Cembo","Comembo","Dasmariñas",
-  "East Rembo","Forbes Park","Guadalupe Nuevo","Guadalupe Viejo",
-  "Kasilawan","La Paz","Magallanes","Olympia","Palanan","Pembo",
-  "Pinagkaisahan","Pio del Pilar","Pitogo","Poblacion",
-  "Post Proper Northside","Post Proper Southside","Rizal","San Antonio",
-  "San Isidro","San Lorenzo","Santa Cruz","Singkamas","South Cembo",
-  "Tejeros","Ugong Norte","Urdaneta","West Rembo",
+  // District 1
+  "Bangkal","Bel-Air","Carmona","Dasmariñas","Forbes Park",
+  "Kasilawan","La Paz","Magallanes","Olympia","Palanan",
+  "Pio del Pilar","Poblacion","San Antonio","San Isidro","San Lorenzo",
+  "Santa Cruz","Singkamas","Tejeros","Urdaneta","Valenzuela",
+  // District 2
+  "Guadalupe Nuevo","Guadalupe Viejo","Pinagkaisahan",
 ];
 
 export default function NewIncidentForm() {
